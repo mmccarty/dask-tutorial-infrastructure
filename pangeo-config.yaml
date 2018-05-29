@@ -40,3 +40,5 @@ jupyterhub:
     users: false
     timeout: 1200
     every: 600
+  nodeSelector:
+    type: gpu

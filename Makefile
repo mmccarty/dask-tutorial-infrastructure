@@ -1,38 +1,42 @@
-cluster_name ?= dask-pycon
+cluster_name ?= gpu-notebooks
 name ?= $(cluster_name)
 config ?= pangeo-config.yaml
 pangeo_version ?= v0.1.0-673e876
 
 # GCP settings
-project_id ?= dask-demo-182016
-zone ?= us-central1-b
+project_id ?= continuum-compute
+zone ?= us-east1-d
 num_nodes ?= 3
 machine_type ?= n1-standard-4
 
 cluster:
 	gcloud container clusters create $(cluster_name) \
+	    --cluster-version "1.9.6-gke.1" \
 	    --num-nodes=$(num_nodes) \
 	    --machine-type=$(machine_type) \
 	    --zone=$(zone) \
 	    --enable-autorepair \
-	    --enable-autoscaling --min-nodes=1 --max-nodes=200
-	gcloud beta container node-pools create dask-pycon-preemptible \
+	    --enable-autoscaling --min-nodes=1 --max-nodes=200 
+	gcloud beta container node-pools create gpu-preemptible \
 	    --cluster=$(cluster_name) \
 	    --preemptible \
 	    --machine-type=$(machine_type) \
 	    --zone=$(zone) \
+		--accelerator type=nvidia-tesla-k80,count=1 \
 	    --enable-autorepair \
 	    --enable-autoscaling --min-nodes=1 --max-nodes=900 \
-	    --node-taints preemptible=true:NoSchedule
+	    --node-taints preemptible=true:NoSchedule \
+		--node-labels=type=gpu
 
 helm:
-	kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=taugspurger@anaconda.com
+	kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=mmccarty@anaconda.com
 	kubectl --namespace kube-system create sa tiller
 	kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
 	helm init --service-account tiller
 	kubectl --namespace=kube-system patch deployment tiller-deploy --type=json --patch='[{"op": "add", "path": "/spec/template/spec/containers/0/command", "value": ["/tiller", "--listen=localhost:44134"]}]'
 
 jupyterhub:
+	kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/k8s-1.9/nvidia-driver-installer/cos/daemonset-preloaded.yaml
 	helm repo add jupyterhub https://jupyterhub.github.io/helm-chart/
 	helm repo add pangeo https://pangeo-data.github.io/helm-chart/
 	helm repo update
